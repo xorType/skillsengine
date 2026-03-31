@@ -627,7 +627,7 @@ func main() {
 	loadDocuments()
 
 	engine := skillengine.NewEngine(
-		&ollamaLLM{baseURL: "http://localhost:11434", model: "qwen3:0.6b"},
+		&ollamaLLM{baseURL: "http://localhost:11434", model: "qwen3.5:397b-cloud"},
 		newFileSkillStore("skills"),
 		newDemoRunStore(),
 		skillengine.DefaultAdaptiveConfig(),
