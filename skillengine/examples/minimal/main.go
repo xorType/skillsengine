@@ -17,80 +17,237 @@ import (
 	"sync"
 	"time"
 
-	"github.com/xorType/skillsengine"
+	skillengine "github.com/xorType/skillsengine"
 )
 
-type demoLLM struct{}
+type ollamaLLM struct {
+	baseURL string
+	model   string
+}
 
-func (d *demoLLM) Chat(_ context.Context, _, userPrompt string, _ skillengine.ChatOpts) (<-chan skillengine.Chunk, error) {
-	out := make(chan skillengine.Chunk, 1)
+type ollamaChatRequest struct {
+	Model    string          `json:"model"`
+	Messages []ollamaMessage `json:"messages"`
+	Stream   bool            `json:"stream"`
+	Options  map[string]any  `json:"options,omitempty"`
+}
+
+type ollamaMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+type ollamaChatResponse struct {
+	Message ollamaMessage `json:"message"`
+	Done    bool          `json:"done"`
+	Error   string        `json:"error,omitempty"`
+}
+
+func (o *ollamaLLM) Chat(ctx context.Context, systemPrompt, userPrompt string, opts skillengine.ChatOpts) (<-chan skillengine.Chunk, error) {
+	messages := []ollamaMessage{
+		{Role: "system", Content: systemPrompt},
+		{Role: "user", Content: userPrompt},
+	}
+	options := map[string]any{}
+	if opts.Temperature > 0 {
+		options["temperature"] = opts.Temperature
+	}
+	if opts.MaxTokens > 0 {
+		options["num_predict"] = opts.MaxTokens
+	}
+	body, err := json.Marshal(ollamaChatRequest{
+		Model:    o.model,
+		Messages: messages,
+		Stream:   true,
+		Options:  options,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("marshal ollama request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, o.baseURL+"/api/chat", bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("create ollama request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("ollama request: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		return nil, fmt.Errorf("ollama returned %s: %s", resp.Status, strings.TrimSpace(string(b)))
+	}
+
+	out := make(chan skillengine.Chunk, 8)
 	go func() {
 		defer close(out)
-		switch {
-		case strings.Contains(userPrompt, "Create a skill instruction document"):
-			out <- skillengine.Chunk{Content: "# Campaign Brief Generator\n\n## Intent\nCreate a concise campaign brief from source material.\n\n## Instructions\nExtract only facts from sources and organize into the required sections.\n\n## Output Format\n## Campaign Objective\n## Target Audience\n## Core Message\n## Channels\n## Timeline\n## Risks\n\n## Rules\n- Do not invent missing data.\n- Call out unknowns explicitly.", Done: true}
-		case strings.Contains(userPrompt, "Extract all relevant information"):
-			out <- skillengine.Chunk{Content: "## Extracted Data\n- Objective: Increase trial signups by 20% in Q2\n- Audience: Mid-market marketing ops managers\n- Message: Launch-ready workflows in under 1 hour\n- Channels: LinkedIn, lifecycle email, partner webinar\n- Timeline: 6-week campaign\n- Risk: Creative approvals may delay launch", Done: true}
-		default:
-			out <- skillengine.Chunk{Content: "## Campaign Objective\nIncrease trial signups by 20% in Q2.\n\n## Target Audience\nMid-market marketing operations managers.\n\n## Core Message\nTeams can launch production workflows in under one hour.\n\n## Channels\nLinkedIn paid, lifecycle email, and partner webinar.\n\n## Timeline\nSix-week campaign with launch in week 2.\n\n## Risks\nCreative approvals could delay launch."}
+		defer resp.Body.Close()
+		scanner := bufio.NewScanner(resp.Body)
+		for scanner.Scan() {
+			line := strings.TrimSpace(scanner.Text())
+			if line == "" {
+				continue
+			}
+			var r ollamaChatResponse
+			if err := json.Unmarshal([]byte(line), &r); err != nil {
+				out <- skillengine.Chunk{Err: fmt.Errorf("decode ollama stream: %w", err)}
+				return
+			}
+			if r.Error != "" {
+				out <- skillengine.Chunk{Err: fmt.Errorf("ollama error: %s", r.Error)}
+				return
+			}
+			out <- skillengine.Chunk{Content: r.Message.Content, Done: r.Done}
+			if r.Done {
+				return
+			}
+		}
+		if err := scanner.Err(); err != nil {
+			out <- skillengine.Chunk{Err: fmt.Errorf("ollama stream read: %w", err)}
 		}
 	}()
 	return out, nil
 }
 
-type demoSkillStore struct {
-	mu     sync.Mutex
-	nextID int
-	skills map[string]*skillengine.SkillDefinition
+// fileSkillStore persists each skill as an individual .md file inside a directory.
+// File format:
+//
+//	---
+//	{JSON metadata (all fields except SkillMarkdown)}
+//	---
+//	{SkillMarkdown body}
+type fileSkillStore struct {
+	mu  sync.Mutex
+	dir string
 }
 
-func newDemoSkillStore() *demoSkillStore {
-	return &demoSkillStore{skills: make(map[string]*skillengine.SkillDefinition)}
+func newFileSkillStore(dir string) *fileSkillStore {
+	return &fileSkillStore{dir: dir}
 }
 
-func (s *demoSkillStore) Save(_ context.Context, skill *skillengine.SkillDefinition) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.nextID++
-	skill.ID = fmt.Sprintf("skill_%d", s.nextID)
-	s.skills[skill.ID] = skill
-	return nil
+func (s *fileSkillStore) filePath(id string) string {
+	return fmt.Sprintf("%s/%s.md", s.dir, id)
 }
 
-func (s *demoSkillStore) Get(_ context.Context, id string) (*skillengine.SkillDefinition, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	sk, ok := s.skills[id]
-	if !ok {
+func (s *fileSkillStore) writeSkill(skill *skillengine.SkillDefinition) error {
+	if err := os.MkdirAll(s.dir, 0755); err != nil {
+		return fmt.Errorf("create skills dir: %w", err)
+	}
+	type meta struct {
+		ID           string    `json:"id"`
+		Name         string    `json:"name"`
+		Description  string    `json:"description"`
+		Intent       string    `json:"intent"`
+		OutputFormat string    `json:"outputFormat"`
+		CreatedBy    string    `json:"createdBy"`
+		CreatedAt    time.Time `json:"createdAt"`
+		UpdatedAt    time.Time `json:"updatedAt"`
+	}
+	m := meta{
+		ID: skill.ID, Name: skill.Name, Description: skill.Description,
+		Intent: skill.Intent, OutputFormat: skill.OutputFormat,
+		CreatedBy: skill.CreatedBy, CreatedAt: skill.CreatedAt, UpdatedAt: skill.UpdatedAt,
+	}
+	frontmatter, err := json.MarshalIndent(m, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal skill meta: %w", err)
+	}
+	content := fmt.Sprintf("---\n%s\n---\n%s", frontmatter, skill.SkillMarkdown)
+	return os.WriteFile(s.filePath(skill.ID), []byte(content), 0644)
+}
+
+func (s *fileSkillStore) readSkill(id string) (*skillengine.SkillDefinition, error) {
+	data, err := os.ReadFile(s.filePath(id))
+	if os.IsNotExist(err) {
 		return nil, fmt.Errorf("skill not found: %s", id)
 	}
-	return sk, nil
+	if err != nil {
+		return nil, fmt.Errorf("read skill file: %w", err)
+	}
+	return parseSkillFile(data)
 }
 
-func (s *demoSkillStore) GetByUser(_ context.Context, userID string) ([]skillengine.SkillDefinition, error) {
+func parseSkillFile(data []byte) (*skillengine.SkillDefinition, error) {
+	const sep = "---"
+	text := string(data)
+	// expect: ---\n{json}\n---\n{body}
+	if !strings.HasPrefix(text, sep+"\n") {
+		return nil, fmt.Errorf("skill file missing frontmatter")
+	}
+	rest := text[len(sep)+1:]
+	end := strings.Index(rest, "\n"+sep+"\n")
+	if end < 0 {
+		return nil, fmt.Errorf("skill file missing closing frontmatter delimiter")
+	}
+	raw := rest[:end]
+	body := rest[end+len("\n"+sep+"\n"):]
+
+	var sk skillengine.SkillDefinition
+	if err := json.Unmarshal([]byte(raw), &sk); err != nil {
+		return nil, fmt.Errorf("parse skill frontmatter: %w", err)
+	}
+	sk.SkillMarkdown = body
+	return &sk, nil
+}
+
+func (s *fileSkillStore) Save(_ context.Context, skill *skillengine.SkillDefinition) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	skill.ID = fmt.Sprintf("skill_%d", time.Now().UnixNano())
+	return s.writeSkill(skill)
+}
+
+func (s *fileSkillStore) Get(_ context.Context, id string) (*skillengine.SkillDefinition, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.readSkill(id)
+}
+
+func (s *fileSkillStore) GetByUser(_ context.Context, userID string) ([]skillengine.SkillDefinition, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	entries, err := os.ReadDir(s.dir)
+	if os.IsNotExist(err) {
+		return []skillengine.SkillDefinition{}, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read skills dir: %w", err)
+	}
 	out := make([]skillengine.SkillDefinition, 0)
-	for _, sk := range s.skills {
-		if sk.CreatedBy == userID {
-			out = append(out, *sk)
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
+			continue
 		}
+		data, err := os.ReadFile(fmt.Sprintf("%s/%s", s.dir, e.Name()))
+		if err != nil {
+			continue
+		}
+		sk, err := parseSkillFile(data)
+		if err != nil || sk.CreatedBy != userID {
+			continue
+		}
+		out = append(out, *sk)
 	}
 	return out, nil
 }
 
-func (s *demoSkillStore) Update(_ context.Context, skill *skillengine.SkillDefinition) error {
+func (s *fileSkillStore) Update(_ context.Context, skill *skillengine.SkillDefinition) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.skills[skill.ID] = skill
-	return nil
+	return s.writeSkill(skill)
 }
 
-func (s *demoSkillStore) Delete(_ context.Context, id string) error {
+func (s *fileSkillStore) Delete(_ context.Context, id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	delete(s.skills, id)
-	return nil
+	err := os.Remove(s.filePath(id))
+	if os.IsNotExist(err) {
+		return nil
+	}
+	return err
 }
 
 type demoRunStore struct {
@@ -391,11 +548,21 @@ func sendCampaignBriefViaGoogleMCP(ctx context.Context, recipient, subject, mark
 	}
 	defer func() { _ = mcp.Close() }()
 
-	accessToken, err := mcp.runGCloud(ctx, "auth print-access-token")
+	accessToken, err := mcp.runGCloud(ctx, "auth print-access-token --scopes=https://www.googleapis.com/auth/gmail.send")
 	if err != nil {
-		return fmt.Errorf("get access token through gcloud-mcp: %w", err)
+		return fmt.Errorf("get access token through gcloud-mcp: %w\n\nHint: re-authenticate with Gmail scopes:\n  gcloud auth application-default login --scopes=https://www.googleapis.com/auth/cloud-platform,https://www.googleapis.com/auth/gmail.send", err)
 	}
-	accessToken = strings.TrimSpace(strings.Split(accessToken, "\n")[0])
+	// Extract the first non-empty line and verify it looks like a bearer token.
+	for _, line := range strings.Split(accessToken, "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			accessToken = line
+			break
+		}
+	}
+	if !strings.HasPrefix(accessToken, "ya29.") {
+		return fmt.Errorf("gcloud returned an invalid access token (got %q); the current credential may not include the Gmail send scope.\n\nRe-authenticate with:\n  gcloud auth application-default login --scopes=https://www.googleapis.com/auth/cloud-platform,https://www.googleapis.com/auth/gmail.send", accessToken)
+	}
 
 	rawMessage := buildRawGmailMessage(recipient, subject, markdown)
 	payload, err := json.Marshal(map[string]string{"raw": rawMessage})
@@ -435,20 +602,56 @@ func buildRawGmailMessage(recipient, subject, markdown string) string {
 	return base64.RawURLEncoding.EncodeToString([]byte(mime))
 }
 
+// mdToText strips common markdown syntax to produce a plain-text version.
+func mdToText(md string) string {
+	var sb strings.Builder
+	for _, line := range strings.Split(md, "\n") {
+		// strip heading markers
+		trimmed := strings.TrimLeft(line, "#")
+		if len(trimmed) < len(line) {
+			line = strings.TrimSpace(trimmed)
+		}
+		// strip bold/italic markers
+		line = strings.ReplaceAll(line, "**", "")
+		line = strings.ReplaceAll(line, "__", "")
+		line = strings.ReplaceAll(line, "*", "")
+		line = strings.ReplaceAll(line, "_", "")
+		// strip inline code
+		line = strings.ReplaceAll(line, "`", "")
+		// convert bullet - to plain dash spacing
+		if strings.HasPrefix(strings.TrimSpace(line), "- ") {
+			line = "  " + strings.TrimSpace(line)
+		}
+		sb.WriteString(line)
+		sb.WriteByte('\n')
+	}
+	return sb.String()
+}
+
 func main() {
 	recipient := flag.String("recipient", "", "recipient email address (required)")
 	subject := flag.String("subject", "Example Campaign Brief", "email subject")
 	skipEmail := flag.Bool("skip-email", false, "skip Google MCP + Gmail send step")
+	output := flag.String("output", "", "file path to save the campaign brief (default: campaign-brief.<format>)")
+	format := flag.String("format", "md", "output format for saved brief: md or txt")
 	flag.Parse()
 
-	if strings.TrimSpace(*recipient) == "" {
+	if *format != "md" && *format != "txt" {
+		fmt.Fprintln(os.Stderr, "--format must be md or txt")
+		os.Exit(2)
+	}
+	if *output == "" {
+		*output = "campaign-brief." + *format
+	}
+
+	if !*skipEmail && strings.TrimSpace(*recipient) == "" {
 		fmt.Fprintln(os.Stderr, "missing --recipient")
 		flag.Usage()
 		os.Exit(2)
 	}
 
 	ctx := context.Background()
-	engine := skillengine.NewEngine(&demoLLM{}, newDemoSkillStore(), newDemoRunStore(), skillengine.DefaultAdaptiveConfig())
+	engine := skillengine.NewEngine(&ollamaLLM{baseURL: "http://localhost:11434", model: "qwen3.5:397b-cloud"}, newFileSkillStore("skills"), newDemoRunStore(), skillengine.DefaultAdaptiveConfig())
 
 	skill, err := engine.GenerateSkill(
 		ctx,
@@ -492,6 +695,16 @@ func main() {
 		fmt.Fprintln(os.Stderr, "no markdown generated; aborting email send")
 		os.Exit(1)
 	}
+
+	briefContent := finalMarkdown
+	if *format == "txt" {
+		briefContent = mdToText(finalMarkdown)
+	}
+	if err := os.WriteFile(*output, []byte(briefContent), 0644); err != nil {
+		fmt.Fprintf(os.Stderr, "failed to write brief to %s: %v\n", *output, err)
+		os.Exit(1)
+	}
+	fmt.Printf("brief saved to %s\n", *output)
 
 	if *skipEmail {
 		fmt.Println("email send skipped (--skip-email)")
