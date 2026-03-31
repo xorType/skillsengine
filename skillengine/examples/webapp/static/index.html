@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Skills Engine Demo</title>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #22263a;
+      --border: #2e3250;
+      --accent: #6366f1;
+      --accent-hover: #4f52d6;
+      --success: #22c55e;
+      --warning: #f59e0b;
+      --error: #ef4444;
+      --text: #e2e8f0;
+      --muted: #8892a4;
+      --radius: 10px;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 24px 16px 48px;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+    header h1 {
+      font-size: 1.9rem;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+    }
+    header h1 span { color: var(--accent); }
+    header p { color: var(--muted); margin-top: 6px; font-size: 0.95rem; }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    @media (max-width: 860px) { .layout { grid-template-columns: 1fr; } }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px;
+    }
+
+    .step-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--accent);
+      background: rgba(99,102,241,0.12);
+      border: 1px solid rgba(99,102,241,0.3);
+      border-radius: 99px;
+      padding: 3px 10px;
+      margin-bottom: 12px;
+    }
+
+    h2 {
+      font-size: 1.15rem;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    .card-desc {
+      color: var(--muted);
+      font-size: 0.88rem;
+      margin-bottom: 20px;
+      line-height: 1.5;
+    }
+
+    label {
+      display: block;
+      font-size: 0.82rem;
+      font-weight: 500;
+      color: var(--muted);
+      margin-bottom: 5px;
+      letter-spacing: 0.02em;
+    }
+
+    input, textarea {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      color: var(--text);
+      padding: 9px 12px;
+      font-size: 0.9rem;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.15s;
+      resize: vertical;
+      margin-bottom: 14px;
+    }
+    input:focus, textarea:focus { border-color: var(--accent); }
+    textarea { min-height: 80px; }
+
+    button {
+      cursor: pointer;
+      border: none;
+      border-radius: 7px;
+      font-family: inherit;
+      font-weight: 600;
+      font-size: 0.9rem;
+      padding: 10px 20px;
+      transition: background 0.15s, opacity 0.15s;
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+      width: 100%;
+    }
+    .btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    /* Agent creation status */
+    #agent-status {
+      margin-top: 14px;
+      font-size: 0.85rem;
+      min-height: 22px;
+    }
+    #agent-status.success { color: var(--success); }
+    #agent-status.error   { color: var(--error); }
+    #agent-status.pending { color: var(--warning); }
+
+    /* Agent selector */
+    .section-label {
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--muted);
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+
+    select {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      color: var(--text);
+      padding: 9px 12px;
+      font-size: 0.9rem;
+      font-family: inherit;
+      outline: none;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%238892a4' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      margin-bottom: 16px;
+      cursor: pointer;
+    }
+    select:focus { border-color: var(--accent); }
+
+    /* Document cards */
+    .doc-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+
+    .doc-card {
+      background: var(--surface2);
+      border: 2px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 14px;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+      user-select: none;
+    }
+    .doc-card:hover { border-color: var(--accent); }
+    .doc-card.selected {
+      border-color: var(--accent);
+      background: rgba(99,102,241,0.08);
+    }
+    .doc-card .doc-icon {
+      font-size: 1.2rem;
+      margin-bottom: 6px;
+    }
+    .doc-card .doc-name {
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-bottom: 4px;
+      line-height: 1.3;
+    }
+    .doc-card .doc-preview {
+      font-size: 0.75rem;
+      color: var(--muted);
+      line-height: 1.45;
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 3;
+      overflow: hidden;
+    }
+
+    /* Event log */
+    .result-area {
+      max-width: 1200px;
+      margin: 24px auto 0;
+    }
+
+    .log-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px 24px;
+    }
+    .log-wrap h3 {
+      font-size: 0.95rem;
+      font-weight: 600;
+      margin-bottom: 12px;
+      color: var(--muted);
+    }
+
+    #event-log {
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 0.78rem;
+      line-height: 1.7;
+      color: var(--muted);
+      min-height: 48px;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    #event-log .ev-done    { color: var(--success); }
+    #event-log .ev-started { color: var(--warning); }
+    #event-log .ev-failed  { color: var(--error); }
+    #event-log .ev-info    { color: var(--accent); }
+
+    /* Markdown result */
+    #result-section {
+      margin-top: 24px;
+      display: none;
+    }
+    #result-section .card { padding: 32px; }
+    .result-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+    .result-header h3 { font-size: 1rem; font-weight: 600; }
+    .btn-copy {
+      background: var(--surface2);
+      color: var(--text);
+      border: 1px solid var(--border);
+      font-size: 0.8rem;
+      padding: 6px 14px;
+    }
+    .btn-copy:hover { border-color: var(--accent); color: var(--accent); }
+
+    #markdown-output { line-height: 1.7; font-size: 0.92rem; }
+    #markdown-output h1, #markdown-output h2, #markdown-output h3 {
+      margin: 1.2em 0 0.4em; color: var(--text);
+    }
+    #markdown-output h1 { font-size: 1.4rem; }
+    #markdown-output h2 { font-size: 1.1rem; color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+    #markdown-output h3 { font-size: 0.95rem; }
+    #markdown-output p  { margin: 0.5em 0; color: var(--muted); }
+    #markdown-output ul, #markdown-output ol { padding-left: 1.4em; margin: 0.5em 0; color: var(--muted); }
+    #markdown-output li { margin: 0.25em 0; }
+    #markdown-output strong { color: var(--text); font-weight: 600; }
+    #markdown-output code {
+      background: var(--surface2); border-radius: 4px;
+      padding: 2px 6px; font-size: 0.85em; color: #a5b4fc;
+    }
+    #markdown-output pre {
+      background: var(--surface2); border-radius: 7px;
+      padding: 14px; overflow-x: auto; margin: 0.8em 0;
+    }
+    #markdown-output pre code { background: none; padding: 0; }
+    #markdown-output blockquote {
+      border-left: 3px solid var(--accent);
+      padding-left: 14px; margin: 0.8em 0; color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Skills <span>Engine</span> Demo</h1>
+  <p>Build LLM-powered agents and run them against documents — no code required.</p>
+</header>
+
+<div class="layout">
+
+  <!-- ─── STEP 1: Create Agent ─────────────────────────────────────── -->
+  <div class="card">
+    <div class="step-badge">Step 1</div>
+    <h2>Create an Agent</h2>
+    <p class="card-desc">Describe what the agent should do. The LLM will generate a full instruction set from your inputs.</p>
+
+    <label for="agent-name">Agent Name</label>
+    <input id="agent-name" type="text" placeholder="e.g. Sales Call Summarizer" />
+
+    <label for="agent-desc">Description</label>
+    <input id="agent-desc" type="text" placeholder="e.g. Extracts key actions and objections from sales calls" />
+
+    <label for="agent-intent">Intent</label>
+    <textarea id="agent-intent" placeholder="e.g. Produce a structured summary a sales manager can act on immediately. Highlight buyer objections, next steps, and deal risk."></textarea>
+
+    <label for="agent-output">Output Structure</label>
+    <textarea id="agent-output" placeholder="e.g. ## Summary&#10;## Buyer Objections&#10;## Next Steps&#10;## Deal Risk"></textarea>
+
+    <button class="btn-primary" id="create-btn" onclick="createAgent()">Create Agent</button>
+    <div id="agent-status"></div>
+  </div>
+
+  <!-- ─── STEP 2: Run Agent ─────────────────────────────────────────── -->
+  <div class="card">
+    <div class="step-badge">Step 2</div>
+    <h2>Run Against a Document</h2>
+    <p class="card-desc">Select a saved agent and choose a document to process. Results stream live.</p>
+
+    <div class="section-label">Select Agent</div>
+    <select id="agent-select">
+      <option value="">— loading agents… —</option>
+    </select>
+
+    <div class="section-label">Select Document</div>
+    <div class="doc-grid" id="doc-grid">
+      <!-- populated by JS -->
+    </div>
+
+    <button class="btn-primary" id="run-btn" onclick="runAgent()" disabled>Run Agent</button>
+  </div>
+
+</div>
+
+<!-- ─── Event Log ─────────────────────────────────────────────────── -->
+<div class="result-area">
+  <div class="log-wrap">
+    <h3>Pipeline Events</h3>
+    <div id="event-log"><span style="color:#444">Events will appear here when an agent runs…</span></div>
+  </div>
+
+  <!-- ─── Markdown Result ─────────────────────────────────────────── -->
+  <div id="result-section">
+    <div class="card">
+      <div class="result-header">
+        <h3>Agent Output (Human in the loop)</h3>
+        <button class="btn-copy" onclick="copyResult()">Copy Markdown</button>
+      </div>
+      <div id="markdown-output"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  let selectedDocID = null;
+  let lastCreatedAgentID = null;
+  let rawMarkdown = '';
+
+  // ── Boot ────────────────────────────────────────────────────────────
+  window.addEventListener('DOMContentLoaded', () => {
+    loadDocuments();
+    loadAgents();
+  });
+
+  // ── Documents ───────────────────────────────────────────────────────
+  async function loadDocuments() {
+    const res = await fetch('/api/documents');
+    const docs = await res.json();
+    const grid = document.getElementById('doc-grid');
+    grid.innerHTML = '';
+    const icons = {
+      'call-transcript': '📞',
+      'marketing-research': '📊',
+      'product-feedback': '💬',
+      'competitive-analysis': '🔍',
+    };
+    docs.forEach(doc => {
+      const card = document.createElement('div');
+      card.className = 'doc-card';
+      card.dataset.id = doc.id;
+      card.innerHTML = `
+        <div class="doc-icon">${icons[doc.id] || '📄'}</div>
+        <div class="doc-name">${doc.name}</div>
+        <div class="doc-preview">${doc.preview}</div>`;
+      card.addEventListener('click', () => selectDoc(doc.id));
+      grid.appendChild(card);
+    });
+  }
+
+  function selectDoc(id) {
+    selectedDocID = id;
+    document.querySelectorAll('.doc-card').forEach(c => {
+      c.classList.toggle('selected', c.dataset.id === id);
+    });
+    updateRunBtn();
+  }
+
+  // ── Agents ──────────────────────────────────────────────────────────
+  async function loadAgents(selectID) {
+    const res = await fetch('/api/agents');
+    const agents = await res.json();
+    const sel = document.getElementById('agent-select');
+    sel.innerHTML = '';
+    if (!agents || agents.length === 0) {
+      sel.innerHTML = '<option value="">— create an agent first —</option>';
+      updateRunBtn();
+      return;
+    }
+    agents.forEach(a => {
+      const opt = document.createElement('option');
+      opt.value = a.id;
+      opt.textContent = a.name;
+      sel.appendChild(opt);
+    });
+    if (selectID) sel.value = selectID;
+    updateRunBtn();
+  }
+
+  function updateRunBtn() {
+    const sel = document.getElementById('agent-select');
+    const hasAgent = sel.value && sel.value !== '';
+    const hasDoc = !!selectedDocID;
+    document.getElementById('run-btn').disabled = !(hasAgent && hasDoc);
+  }
+
+  document.addEventListener('change', e => {
+    if (e.target.id === 'agent-select') updateRunBtn();
+  });
+
+  // ── SSE helper ──────────────────────────────────────────────────────
+  async function streamSSE(url, body, onEvent) {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      onEvent('error', { message: text || `HTTP ${res.status}` });
+      return;
+    }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const parts = buf.split('\n\n');
+      buf = parts.pop();
+      for (const part of parts) {
+        if (!part.trim()) continue;
+        let type = 'message', data = '';
+        for (const line of part.split('\n')) {
+          if (line.startsWith('event: ')) type = line.slice(7).trim();
+          else if (line.startsWith('data: ')) data = line.slice(6).trim();
+        }
+        if (data) {
+          try { onEvent(type, JSON.parse(data)); }
+          catch { onEvent(type, { raw: data }); }
+        }
+      }
+    }
+  }
+
+  // ── Create Agent ────────────────────────────────────────────────────
+  async function createAgent() {
+    const name         = document.getElementById('agent-name').value.trim();
+    const description  = document.getElementById('agent-desc').value.trim();
+    const intent       = document.getElementById('agent-intent').value.trim();
+    const outputFormat = document.getElementById('agent-output').value.trim();
+
+    if (!name || !intent) {
+      setStatus('Agent Name and Intent are required.', 'error');
+      return;
+    }
+
+    const btn = document.getElementById('create-btn');
+    btn.disabled = true;
+    setStatus('Generating agent instruction set…', 'pending');
+    clearLog();
+    document.getElementById('result-section').style.display = 'none';
+
+    await streamSSE('/api/agents', { name, description, intent, outputFormat }, (type, data) => {
+      if (type === 'status') {
+        setStatus(data.message, 'pending');
+      } else if (type === 'done') {
+        lastCreatedAgentID = data.id;
+        setStatus(`✓ Agent "${data.name}" created (${data.id})`, 'success');
+        loadAgents(data.id);
+      } else if (type === 'error') {
+        setStatus(`Error: ${data.message}`, 'error');
+      }
+    });
+
+    btn.disabled = false;
+  }
+
+  function setStatus(msg, cls) {
+    const el = document.getElementById('agent-status');
+    el.textContent = msg;
+    el.className = cls || '';
+  }
+
+  // ── Run Agent ───────────────────────────────────────────────────────
+  async function runAgent() {
+    const agentId     = document.getElementById('agent-select').value;
+    const documentId  = selectedDocID;
+    if (!agentId || !documentId) return;
+
+    const btn = document.getElementById('run-btn');
+    btn.disabled = true;
+    clearLog();
+    document.getElementById('result-section').style.display = 'none';
+    rawMarkdown = '';
+
+    logLine('Starting run…', 'ev-info');
+
+    await streamSSE('/api/run', { agentId, documentId }, (type, data) => {
+      if (type === 'step') {
+        const cls = data.status === 'done' ? 'ev-done'
+                  : data.status === 'started' ? 'ev-started'
+                  : data.status === 'failed' ? 'ev-failed' : '';
+        logLine(`[${data.step}] ${data.status}${data.message ? ' — ' + data.message : ''}`, cls);
+      } else if (type === 'result') {
+        rawMarkdown = data.markdown;
+        renderResult(data.markdown);
+      } else if (type === 'error') {
+        logLine(`ERROR: ${data.message}`, 'ev-failed');
+      }
+    });
+
+    btn.disabled = false;
+    updateRunBtn();
+  }
+
+  // ── Log ─────────────────────────────────────────────────────────────
+  function logLine(text, cls) {
+    const log = document.getElementById('event-log');
+    if (log.querySelector('span[style]')) log.innerHTML = '';
+    const line = document.createElement('div');
+    line.textContent = text;
+    if (cls) line.className = cls;
+    log.appendChild(line);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function clearLog() {
+    const log = document.getElementById('event-log');
+    log.innerHTML = '<span style="color:#444">Running…</span>';
+  }
+
+  // ── Result ───────────────────────────────────────────────────────────
+  function renderResult(md) {
+    const section = document.getElementById('result-section');
+    const output  = document.getElementById('markdown-output');
+    output.innerHTML = marked.parse(md);
+    section.style.display = 'block';
+    section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function copyResult() {
+    if (!rawMarkdown) return;
+    navigator.clipboard.writeText(rawMarkdown).then(() => {
+      const btn = document.querySelector('.btn-copy');
+      btn.textContent = 'Copied!';
+      setTimeout(() => btn.textContent = 'Copy Markdown', 1500);
+    });
+  }
+</script>
+</body>
+</html>

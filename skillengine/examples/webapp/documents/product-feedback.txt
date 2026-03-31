@@ -1,0 +1,61 @@
+PRODUCT FEEDBACK SUMMARY — Q1 2026
+Source: Customer surveys (n=214), in-app NPS responses, support ticket themes
+Compiled by: Product Team
+
+---
+
+NET PROMOTER SCORE: 47 (up from 39 in Q4 2025)
+
+---
+
+TOP POSITIVE THEMES
+
+1. Speed of setup (mentioned by 61% of promoters)
+   "We were running our first automated report in under an hour. I've never seen that before."
+   "The Salesforce connector just worked. No back and forth with IT."
+
+2. Report quality (mentioned by 49% of promoters)
+   "Our CMO actually said the weekly dashboard looks better than what our previous agency produced."
+   "The templates save us hours every week."
+
+3. Customer support (mentioned by 44% of promoters)
+   "Every ticket I've opened has been resolved same day. That's rare."
+   "The onboarding specialist stayed on the call until everything was working. Really above and beyond."
+
+---
+
+TOP NEGATIVE THEMES
+
+1. Missing CRM integrations (mentioned by 38% of detractors)
+   "We're on Zoho and there's no native connector. We had to use Zapier which added latency."
+   "HubSpot free tier is not supported — we have to upgrade to use the integration which feels like a bait and switch."
+
+2. Mobile experience (mentioned by 31% of detractors)
+   "The dashboard looks terrible on my phone. I check it on my commute and it's basically unusable."
+   "Need a proper mobile app or at least a responsive layout."
+
+3. Export limitations (mentioned by 27% of detractors)
+   "PDF exports don't support custom fonts. Our brand guide requires Helvetica Neue."
+   "Can't export raw data to CSV from the dashboard — have to go through the API which defeats the purpose."
+
+4. Pricing transparency (mentioned by 19% of detractors)
+   "Didn't realize data connectors beyond the first two were add-on costs. Should be clearer at signup."
+
+---
+
+FEATURE REQUESTS (ranked by volume)
+
+1. Mobile app / responsive design — 89 requests
+2. Additional CRM connectors (Zoho, Pipedrive, Copper) — 76 requests
+3. Custom font support in PDF exports — 54 requests
+4. Slack / Teams alert integration — 48 requests
+5. Multi-user permission roles — 41 requests
+6. Historical data import beyond 24 months — 33 requests
+
+---
+
+CHURN RISK FLAGS
+
+- 14 accounts flagged for low engagement (< 2 logins in 30 days)
+- 6 accounts cited competitor evaluation as reason for reduced usage
+- Primary competitor mentioned: Tableau + Fivetran combo ("more flexible, we already have licenses")

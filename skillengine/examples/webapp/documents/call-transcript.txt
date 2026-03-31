@@ -1,0 +1,49 @@
+SALES CALL TRANSCRIPT
+Date: March 18, 2026
+Rep: Jordan Ellis (Account Executive)
+Prospect: Diane Cho, VP of Marketing Operations at Meridian Health Systems
+
+---
+
+Jordan: Hi Diane, thanks for making time today. I know your calendar is packed.
+
+Diane: Of course. I've been looking at your platform for a few weeks now and I have some specific questions.
+
+Jordan: Absolutely, fire away.
+
+Diane: So right now our team spends about 12 hours a week manually pulling data from three different systems — Salesforce, Marketo, and our internal analytics tool — just to produce the weekly performance report. It's brutal. Can your platform actually connect to all three?
+
+Jordan: Yes, we have native connectors for both Salesforce and Marketo, and for custom analytics systems we offer a REST API connector that most teams get running in under a day.
+
+Diane: Okay. And what does the output look like? We currently send a PDF to our CMO every Monday morning. Can that stay the same?
+
+Jordan: We can export to PDF, and you can schedule automated delivery — so it arrives in your CMO's inbox on a schedule you define. You'd set it once and never touch it again.
+
+Diane: That's promising. What about security? We deal with patient data adjacent information — not PHI directly, but we're very cautious. Are you HIPAA compliant?
+
+Jordan: We're SOC 2 Type II certified and we're in the process of completing our HIPAA BAA program. We expect to have that fully in place by end of Q2. In the meantime we can sign a BAA with enterprise customers on a case-by-case basis.
+
+Diane: That timeline works. Q2 is actually when our budget cycle resets, so it aligns.
+
+Jordan: Perfect. What does your evaluation process look like from here?
+
+Diane: I'll need to loop in our IT security lead — his name is Marcus — and our CFO will want a business case. If the technical review goes well, we can probably move to contract by late April.
+
+Jordan: Great. I'll send over our security documentation this afternoon, and I can put together a custom ROI summary based on the 12-hour-per-week figure you mentioned. Would a 30-minute call with Marcus work next week?
+
+Diane: Tuesday or Wednesday afternoon works for him.
+
+Jordan: I'll send a calendar invite for Tuesday the 24th at 2pm. One last question — is there a specific budget range you're working within?
+
+Diane: We're targeting under $40k annually for this kind of tool. Is that workable?
+
+Jordan: It is. Our Team plan starts at $28k annually and covers everything we discussed. There's also a Professional tier at $36k that adds advanced scheduling and white-label PDF templates, which sounds relevant for your CMO reports.
+
+Diane: That all sounds reasonable. Let's move forward with the technical review and see where we land.
+
+Jordan: Excellent. I'll get that documentation over today. Thank you, Diane.
+
+Diane: Thanks Jordan, talk soon.
+
+---
+END OF TRANSCRIPT
